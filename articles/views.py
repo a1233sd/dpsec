@@ -1,3 +1,4 @@
+#articles/views.py
 from django.views import View
 from django.shortcuts import render
 from rest_framework import viewsets
@@ -18,16 +19,38 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from django.conf import settings
 import os
-
+from .external_search import search_google_fragment
+from .ai_detection import detect_ai
 from .models import Report
 
 def analyze_report(request, report_id):
     report = get_object_or_404(Report, id=report_id)
 
-    # Простейшая имитация анализа
-    report.originality_percent = random.randint(40, 95)
-    report.ai_generated_percent = random.randint(5, 60)
+    # Разбиваем текст на фрагменты
+    fragments = report.content.split('. ')
+    external_hits = []
+
+    for frag in fragments[:5]:  # Проверим только первые 5 фрагментов
+        matches = search_google_fragment(frag)
+        if matches:
+            external_hits.append({
+                "fragment": frag,
+                "matches": matches
+            })
+
+    # Простейшая метрика оригинальности
+    originality_score = 100 - len(external_hits) * 15
+    originality_score = max(0, originality_score)
+
+    # Определение вероятности AI
+    ai_generated = detect_ai(report.content)
+
+    # Сохраняем в модель
+    report.originality_percent = originality_score
+    report.ai_generated_percent = ai_generated
     report.save()
+
+    # (Дополнительно) можно сохранить external_hits в Report как JSONField или отдельную модель
 
     return redirect('get_reference', report_id=report.id)
 
