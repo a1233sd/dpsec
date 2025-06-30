@@ -1,27 +1,31 @@
+# articles/ai_detection.py
 import os
 import requests
+from dotenv import load_dotenv
 
-SAPLING_API_KEY = os.getenv("SAPLING_API_KEY")  # или впиши ключ напрямую (не рекомендуется)
+load_dotenv()
+
+SAPLING_API_KEY = os.getenv("SAPLING_API_KEY")
 
 def detect_ai(text: str) -> float:
-    url = "https://api.sapling.ai/api/v1/ai-detection"
+    """
+    Возвращает вероятность AI-генерации текста от Sapling API.
+    """
+    url = "https://api.sapling.ai/api/v1/aidetect"
     headers = {
         "Authorization": f"Bearer {SAPLING_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {
+        "key": SAPLING_API_KEY,
         "text": text
     }
 
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-
-        # Предположим, что API возвращает вероятность в поле data['ai_probability']
-        # Нужно уточнить в документации Sapling, как именно называется поле
-        ai_prob = data.get("ai_probability", 0.0)  # пример
-        return float(ai_prob) * 100  # в процентах
-    except Exception as e:
-        print("Ошибка при вызове Sapling AI detection:", e)
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code == 200:
+        result = response.json()
+        prob = result.get("ai_probability", 0.0)
+        return round(float(prob) * 100, 2)
+    else:
+        print("Sapling API error:", response.status_code, response.text)
         return 0.0

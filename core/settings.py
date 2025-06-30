@@ -1,3 +1,4 @@
+#core/settings.py
 from pathlib import Path
 import os
 from dotenv import load_dotenv
@@ -12,7 +13,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'replace-this-in-production')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
-
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 # Приложения
 INSTALLED_APPS = [
     'django.contrib.admin',

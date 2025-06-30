@@ -1,8 +1,8 @@
-# forms.py
+#articles/forms.py
 from django import forms
-from .models import Report  # или твоя модель доклада
+from .models import Report
 
 class ReportForm(forms.ModelForm):
     class Meta:
         model = Report
-        fields = ['title', 'file', 'author', 'other_fields_if_any']
+        fields = ['title', 'content', 'file']

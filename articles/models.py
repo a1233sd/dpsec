@@ -13,12 +13,12 @@ class Report(models.Model):
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     content = models.TextField(blank=True)
-    file_path = models.TextField(blank=True)
+    file = models.FileField(upload_to='reports_files/', blank=True, null=True)  # <-- заменили file_path на FileField
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
 
-    ai_generated_percent = models.FloatField(null=True, blank=True)  # % ИИ-генерации
-    originality_percent = models.FloatField(null=True, blank=True)  # % оригинальности
+    ai_generated_percent = models.FloatField(null=True, blank=True)
+    originality_percent = models.FloatField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.title} ({self.author.email})"
