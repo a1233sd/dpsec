@@ -1,16 +1,16 @@
 #articles/views.py
-from django.views import View
-from django.shortcuts import render
 from rest_framework import viewsets
 from .models import PlagiarismCheck
 from .serializers import ReportSerializer, PlagiarismCheckSerializer
 from django.views.generic import TemplateView, DetailView
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.views.generic import DeleteView
 from django.urls import reverse_lazy
+from django.views import View
+from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.shortcuts import redirect
-import random
+from .forms import ReportForm
+from django.contrib.auth.mixins import LoginRequiredMixin
 import io
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -26,32 +26,54 @@ from .models import Report
 def analyze_report(request, report_id):
     report = get_object_or_404(Report, id=report_id)
 
-    # Разбиваем текст на фрагменты
-    fragments = report.content.split('. ')
-    external_hits = []
+    text = report.content.strip()
+    if not text:
+        messages.error(request, "Текст доклада пустой.")
+        return redirect('get_reference', report_id=report.id)
 
-    for frag in fragments[:5]:  # Проверим только первые 5 фрагментов
-        matches = search_google_fragment(frag)
-        if matches:
-            external_hits.append({
-                "fragment": frag,
-                "matches": matches
-            })
+    # Разбиваем текст на фрагменты по 25 слов с шагом 20
+    words = text.split()
+    fragment_size = 25
+    step = 20
+    fragments = [
+        " ".join(words[i:i + fragment_size])
+        for i in range(0, len(words), step)
+        if len(words[i:i + fragment_size]) >= 10
+    ]
 
-    # Простейшая метрика оригинальности
-    originality_score = 100 - len(external_hits) * 15
-    originality_score = max(0, originality_score)
+    plagiarism_hits = 0
+    total_checked = 0
 
-    # Определение вероятности AI
-    ai_generated = detect_ai(report.content)
+    for frag in fragments:
+        try:
+            results = search_google_fragment(frag)
+            if results:  # Найдены внешние совпадения
+                plagiarism_hits += 1
+            total_checked += 1
+        except Exception as e:
+            print(f"[Ошибка поиска] {e}")
+            continue
 
-    # Сохраняем в модель
-    report.originality_percent = originality_score
-    report.ai_generated_percent = ai_generated
+    if total_checked == 0:
+        originality_percent = 100.0
+    else:
+        originality_percent = max(0, 100 - (plagiarism_hits / total_checked) * 100)
+
+    # Проверка на AI
+    try:
+        ai_score = detect_ai(text)
+        ai_score = float(ai_score) if ai_score is not None else 0.0
+        print(f"[AI detection] AI score: {ai_score}")
+    except Exception as e:
+        print(f"[Ошибка AI-анализа] {e}")
+        ai_score = 0.0
+
+    # Сохраняем результаты
+    report.originality_percent = round(originality_percent, 2)
+    report.ai_generated_percent = round(ai_score, 2)
     report.save()
 
-    # (Дополнительно) можно сохранить external_hits в Report как JSONField или отдельную модель
-
+    messages.success(request, f"Проверка завершена. Оригинальность: {originality_percent:.2f}%, ИИ: {ai_score:.2f}%")
     return redirect('get_reference', report_id=report.id)
 
 class ReportViewSet(viewsets.ModelViewSet):
@@ -69,24 +91,20 @@ class RegisterReportPageView(LoginRequiredMixin, View):
 
     def get(self, request):
         reports = Report.objects.filter(author=request.user).order_by('-created_at')
-        return render(request, self.template_name, {'reports': reports})
+        form = ReportForm()
+        return render(request, self.template_name, {'reports': reports, 'form': form})
 
     def post(self, request):
-        title = request.POST.get('title')
-        content = request.POST.get('text')
-
-        if title and content:
-            Report.objects.create(
-                title=title,
-                content=content,
-                author=request.user
-            )
+        form = ReportForm(request.POST, request.FILES)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.author = request.user
+            report.save()
             messages.success(request, 'Доклад успешно зарегистрирован!')
             return redirect('register_report')
-
-        messages.error(request, 'Пожалуйста, заполните все поля.')
+        messages.error(request, 'Пожалуйста, исправьте ошибки в форме.')
         reports = Report.objects.filter(author=request.user).order_by('-created_at')
-        return render(request, self.template_name, {'reports': reports})
+        return render(request, self.template_name, {'reports': reports, 'form': form})
 
 
 class ReportDetailView(DetailView):
@@ -122,26 +140,18 @@ class EditReportView(LoginRequiredMixin, View):
 
     def get(self, request, pk):
         report = get_object_or_404(Report, pk=pk, author=request.user)
-        return render(request, self.template_name, {'report': report})
+        form = ReportForm(instance=report)
+        return render(request, self.template_name, {'form': form, 'report': report})
 
     def post(self, request, pk):
         report = get_object_or_404(Report, pk=pk, author=request.user)
-        title = request.POST.get('title')
-        content = request.POST.get('content')
-        file = request.FILES.get('file')
-
-        if not title or not content:
-            messages.error(request, 'Пожалуйста, заполните все обязательные поля.')
-            return render(request, self.template_name, {'report': report})
-
-        report.title = title
-        report.content = content
-        if file:
-            report.file = file
-        report.save()
-
-        messages.success(request, 'Доклад успешно обновлён!')
-        return redirect('report_info', pk=report.pk)
+        form = ReportForm(request.POST, request.FILES, instance=report)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Доклад успешно обновлён!')
+            return redirect('report_info', pk=report.pk)
+        messages.error(request, 'Пожалуйста, исправьте ошибки в форме.')
+        return render(request, self.template_name, {'form': form, 'report': report})
 
 class ReportDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     model = Report

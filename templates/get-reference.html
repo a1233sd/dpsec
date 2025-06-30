@@ -72,7 +72,12 @@
   <p><strong>Автор:</strong> {{ report.author.email }}</p>
   <p><strong>Дата загрузки:</strong> {{ report.created_at|date:"d.m.Y H:i" }}</p>
   <p><strong>Оригинальность:</strong> {{ report.originality_percent|default:"–" }}%</p>
-  <p><strong>ИИ-генерация:</strong> {{ report.ai_generated_percent|default:"–" }}%</p>
+  <p><strong>ИИ-генерация:</strong> {% if report.ai_generated_percent is not None %}
+    {{ report.ai_generated_percent }}%
+{% else %}
+    –
+{% endif %}
+</p>
 
   <a href="{% url 'profile' %}" class="btn-back">← Назад</a>
   <a href="{% url 'generate_certificate' report.id %}" class="btn-pdf">

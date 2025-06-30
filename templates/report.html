@@ -136,11 +136,25 @@
           <div class="card-body">
             <p><strong>Автор:</strong> {{ report.author }}</p>
             <p><strong>Дата:</strong> {{ report.created_at|date:"d.m.Y H:i" }}</p>
-            <p><strong>Уровень оригинальности:</strong> {{ report.originality_level }}%</p>
-            <p><strong>Индекс ИИ-генерации:</strong> {{ report.ai_generated_index }}%</p>
+            <p><strong>Уровень оригинальности:</strong>
+  {% if report.originality_percent is not None %}
+    {{ report.originality_percent }}%
+  {% else %}
+    <em>Не проверено</em>
+  {% endif %}
+</p>
+
+<p><strong>Индекс ИИ-генерации:</strong>
+  {% if report.ai_generated_percent is not None %}
+    {{ report.ai_generated_percent }}%
+  {% else %}
+    <em>Не проверено</em>
+  {% endif %}
+</p>
+
           </div>
           <div class="card-footer">
-<a href="{% url 'get_reference' report.id %}" class="btn-submit">Получить справку</a>
+<a href="{% url 'analyze_report' report.id %}" class="btn-submit">Получить справку</a>
           </div>
         </div>
       </div>

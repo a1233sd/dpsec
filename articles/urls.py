@@ -1,3 +1,4 @@
+#articles/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import *
@@ -15,5 +16,7 @@ urlpatterns = [
     path('reports/<int:pk>/edit/', EditReportView.as_view(), name='edit_report'),
     path('report/<int:pk>/delete/', ReportDeleteView.as_view(), name='delete_report'),
     path('generate-certificate/<int:report_id>/', generate_certificate, name='generate_certificate'),
+    path('analyze-report/<int:report_id>/', analyze_report, name='analyze_report'),
+
 
 ]
