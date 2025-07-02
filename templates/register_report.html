@@ -320,32 +320,43 @@
 
   <main class="content">
     <h2>Зарегистрировать новый доклад</h2>
+
+    <!-- ПРОГРЕСС-БАР -->
+    <div id="progress-bar" style="
+      display: none;
+      height: 6px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #6c00ff, #b300ff);
+      width: 0%;
+      margin-bottom: 20px;
+      transition: width 0.3s ease;
+    "></div>
+
     <form method="post" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
       {{ form.non_field_errors }}
 
       <label>Название доклада</label>
-{{ form.title }}
-{% for error in form.title.errors %}
-  <div class="text-danger">{{ error }}</div>
-{% endfor %}
-
-
-      <div class="mb-3">
-  {{ form.content.label_tag }}
-  {{ form.content }}
-  {% for error in form.content.errors %}
-    <div class="text-danger">{{ error }}</div>
-  {% endfor %}
-</div>
+      {{ form.title }}
+      {% for error in form.title.errors %}
+        <div class="text-danger">{{ error }}</div>
+      {% endfor %}
 
       <div class="mb-3">
-  {{ form.file.label_tag }}
-  {{ form.file }}
-  {% for error in form.file.errors %}
-    <div class="text-danger">{{ error }}</div>
-  {% endfor %}
-</div>
+        {{ form.content.label_tag }}
+        {{ form.content }}
+        {% for error in form.content.errors %}
+          <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="mb-3">
+        {{ form.file.label_tag }}
+        {{ form.file }}
+        {% for error in form.file.errors %}
+          <div class="text-danger">{{ error }}</div>
+        {% endfor %}
+      </div>
 
       <button type="submit" class="btn-submit">Зарегистрировать</button>
     </form>
@@ -356,18 +367,31 @@
   </footer>
 
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const dropdown = document.querySelector('.dropdown');
-      const dropdownIcon = dropdown.querySelector('.dropdown-icon');
-      const dropdownContent = dropdown.querySelector('.dropdown-content');
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.querySelector('main.content form');
+      const progressBar = document.getElementById('progress-bar');
+      const submitBtn = form.querySelector('button[type="submit"]');
 
-      dropdownIcon.addEventListener('click', function (e) {
-        e.stopPropagation();
-        dropdownContent.classList.toggle('show');
-      });
+      form.addEventListener('submit', () => {
+        // Показываем прогресс-бар и обнуляем ширину
+        progressBar.style.display = 'block';
+        progressBar.style.width = '0%';
 
-      document.addEventListener('click', function () {
-        dropdownContent.classList.remove('show');
+        let width = 0;
+        const interval = setInterval(() => {
+          if (width >= 90) {
+            clearInterval(interval);
+          } else {
+            width += 10;
+            progressBar.style.width = width + '%';
+          }
+        }, 300);
+
+        // Блокируем кнопку и меняем текст
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Загрузка...";
+        }
       });
     });
   </script>

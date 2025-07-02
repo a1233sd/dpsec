@@ -3,6 +3,13 @@
 
 {% block content %}
 <style>
+  .highlight-fragment {
+    background-color: #fff0c7;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+  }
+
   .reference-container {
     max-width: 800px;
     margin: 30px auto;
@@ -24,7 +31,8 @@
     margin-bottom: 10px;
   }
 
-  .btn-pdf {
+  .btn-pdf,
+  .btn-back {
     display: inline-block;
     margin-top: 20px;
     background: #7e00ff;
@@ -36,25 +44,17 @@
     transition: background 0.3s;
   }
 
-  .btn-pdf:hover {
-    background: #5d00c7;
-  }
-
   .btn-back {
-    display: inline-block;
-    margin-top: 20px;
-    margin-right: 15px;
     background: #555;
-    color: white;
-    padding: 10px 20px;
-    border-radius: 10px;
-    text-decoration: none;
-    font-weight: 600;
-    transition: background 0.3s;
+    margin-right: 15px;
   }
 
   .btn-back:hover {
     background: #333;
+  }
+
+  .btn-pdf:hover {
+    background: #5d00c7;
   }
 
   .content-block {
@@ -64,6 +64,35 @@
     white-space: pre-wrap;
     line-height: 1.6;
   }
+
+  .plagiarism-details {
+    margin-top: 40px;
+    padding: 20px;
+    background-color: #f9f5ff;
+    border: 1px solid #e0d9f7;
+    border-radius: 12px;
+  }
+
+  .plagiarism-details h2 {
+    font-size: 22px;
+    margin-bottom: 15px;
+    color: #6b2bc3;
+  }
+
+  .match-item {
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .match-item p {
+    margin: 5px 0;
+  }
+
+  .match-item a {
+    color: #7e00ff;
+    text-decoration: underline;
+  }
 </style>
 
 <div class="reference-container">
@@ -71,21 +100,71 @@
 
   <p><strong>Автор:</strong> {{ report.author.email }}</p>
   <p><strong>Дата загрузки:</strong> {{ report.created_at|date:"d.m.Y H:i" }}</p>
-  <p><strong>Оригинальность:</strong> {{ report.originality_percent|default:"–" }}%</p>
-  <p><strong>ИИ-генерация:</strong> {% if report.ai_generated_percent is not None %}
-    {{ report.ai_generated_percent }}%
-{% else %}
-    –
-{% endif %}
-</p>
+  <p><strong>Оригинальность:</strong>
+    {% if report.originality_percent is not None %}
+      {{ report.originality_percent }}%
+    {% else %}–{% endif %}
+  </p>
+  <p><strong>ИИ-генерация:</strong>
+    {% if report.ai_generated_percent is not None %}
+      {{ report.ai_generated_percent }}%
+    {% else %}–{% endif %}
+  </p>
 
   <a href="{% url 'profile' %}" class="btn-back">← Назад</a>
-  <a href="{% url 'generate_certificate' report.id %}" class="btn-pdf">
-    📥 Получить справку (PDF)
-  </a>
+  <a href="{% url 'generate_certificate' report.id %}" class="btn-pdf">📥 Получить справку (PDF)</a>
 
-  <div class="content-block">
-    {{ report.full_text|default:"Текст доклада не найден."|linebreaks }}
+  <div class="content-block" id="report-content">
+    {{ report.content|default:"Текст доклада не найден."|escapejs }}
   </div>
+
+  {% if plagiarism_details %}
+    <div class="plagiarism-details">
+      <h2>Подробный отчет о совпадениях</h2>
+      {% for match in plagiarism_details %}
+        <div class="match-item">
+          <p><strong>Фрагмент:</strong> {{ match.fragment|truncatechars:200 }}</p>
+          <p>
+            <strong>Процент совпадения:</strong>
+            <span style="
+              color: {% if match.similarity_percent >= 85 %}#c40000
+                     {% elif match.similarity_percent >= 70 %}#e68700
+                     {% elif match.similarity_percent >= 50 %}#0073e6
+                     {% else %}#2f9e44{% endif %};
+              font-weight: bold;">
+              {{ match.similarity_percent }}%
+            </span>
+          </p>
+          <p><strong>Источник:</strong> <a href="{{ match.url }}" target="_blank">{{ match.title }}</a></p>
+          <p><em>Сниппет:</em> {{ match.snippet|truncatechars:250 }}</p>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p style="margin-top: 30px;">Подробный отчет о совпадениях отсутствует.</p>
+  {% endif %}
 </div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const contentBlock = document.getElementById("report-content");
+    let contentText = contentBlock.textContent;
+
+    const fragments = {{ plagiarism_details|safe }};
+
+    if (!Array.isArray(fragments)) return;
+
+    const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    fragments.forEach(match => {
+      const fragment = match.fragment.trim();
+      if (!fragment || fragment.length < 10) return;
+
+      const regex = new RegExp(escapeRegExp(fragment), "gi");
+      contentText = contentText.replace(regex, match => `<span class="highlight-fragment">${match}</span>`);
+    });
+
+    contentBlock.innerHTML = contentText;
+  });
+</script>
 {% endblock %}
