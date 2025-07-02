@@ -1,19 +1,18 @@
 #articles/views.py
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 from rest_framework import viewsets
-from .models import PlagiarismCheck
+from .models import PlagiarismCheck, Report
 from .serializers import ReportSerializer, PlagiarismCheckSerializer
-from django.views.generic import TemplateView, DetailView
-from django.contrib.auth.mixins import UserPassesTestMixin
-from django.views.generic import DeleteView
+from django.views.generic import TemplateView, DetailView, DeleteView
+from django.contrib.auth.mixins import UserPassesTestMixin, LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.views import View
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from .forms import ReportForm
-from django.contrib.auth.mixins import LoginRequiredMixin
 import io
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -21,7 +20,23 @@ from django.conf import settings
 import os
 from .external_search import search_google_fragment
 from .ai_detection import detect_ai
-from .models import Report
+
+# Новый импорт для извлечения текста из PDF
+import fitz  # PyMuPDF
+
+
+def extract_text_from_pdf(pdf_file):
+    text = ''
+    try:
+        pdf_file.seek(0)  # обязательно сбрасываем указатель в начало файла
+        with fitz.open(stream=pdf_file.read(), filetype="pdf") as doc:
+            for page in doc:
+                text += page.get_text()
+    except Exception as e:
+        print(f"[Ошибка чтения PDF] {e}")
+        return ''
+    return text.strip()
+
 
 def analyze_report(request, report_id):
     report = get_object_or_404(Report, id=report_id)
@@ -31,7 +46,6 @@ def analyze_report(request, report_id):
         messages.error(request, "Текст доклада пустой.")
         return redirect('get_reference', report_id=report.id)
 
-    # Разбиваем текст на фрагменты по 25 слов с шагом 20
     words = text.split()
     fragment_size = 25
     step = 20
@@ -43,23 +57,45 @@ def analyze_report(request, report_id):
 
     plagiarism_hits = 0
     total_checked = 0
+    detailed_matches = []
 
     for frag in fragments:
         try:
             results = search_google_fragment(frag)
-            if results:  # Найдены внешние совпадения
+            best_match = None
+            best_score = 0.0
+
+            for res in results:
+                try:
+                    vectorizer = TfidfVectorizer().fit_transform([frag, res["snippet"]])
+                    cos_sim = cosine_similarity(vectorizer[0:1], vectorizer[1:2])[0][0]
+                    sim_percent = round(cos_sim * 100, 2)
+                except Exception as e:
+                    print(f"[Ошибка косинусного сравнения] {e}")
+                    sim_percent = 0.0
+
+                if sim_percent > best_score:
+                    best_score = sim_percent
+                    best_match = {
+                        "fragment": frag,
+                        "similarity_percent": sim_percent,
+                        "url": res["url"],
+                        "title": res["title"],
+                        "snippet": res["snippet"]
+                    }
+
+            if best_score >= 60.0 and best_match:
                 plagiarism_hits += 1
+                detailed_matches.append(best_match)
+
             total_checked += 1
+
         except Exception as e:
             print(f"[Ошибка поиска] {e}")
             continue
 
-    if total_checked == 0:
-        originality_percent = 100.0
-    else:
-        originality_percent = max(0, 100 - (plagiarism_hits / total_checked) * 100)
+    originality_percent = 100.0 if total_checked == 0 else max(0.0, 100.0 - (plagiarism_hits / total_checked) * 100.0)
 
-    # Проверка на AI
     try:
         ai_score = detect_ai(text)
         ai_score = float(ai_score) if ai_score is not None else 0.0
@@ -68,13 +104,15 @@ def analyze_report(request, report_id):
         print(f"[Ошибка AI-анализа] {e}")
         ai_score = 0.0
 
-    # Сохраняем результаты
     report.originality_percent = round(originality_percent, 2)
     report.ai_generated_percent = round(ai_score, 2)
     report.save()
 
+    request.session['plagiarism_details'] = detailed_matches
+
     messages.success(request, f"Проверка завершена. Оригинальность: {originality_percent:.2f}%, ИИ: {ai_score:.2f}%")
     return redirect('get_reference', report_id=report.id)
+
 
 class ReportViewSet(viewsets.ModelViewSet):
     queryset = Report.objects.all()
@@ -99,9 +137,24 @@ class RegisterReportPageView(LoginRequiredMixin, View):
         if form.is_valid():
             report = form.save(commit=False)
             report.author = request.user
+
+            # Автоматическое извлечение текста из PDF, если content пустой и файл загружен
+            if not report.content and report.file:
+                extracted_text = extract_text_from_pdf(report.file)
+                if extracted_text:
+                    report.content = extracted_text
+                else:
+                    messages.warning(request, "Не удалось извлечь текст из PDF.")
+
+            if not report.content:
+                messages.error(request, "Доклад не может быть пустым. Введите текст или загрузите PDF.")
+                reports = Report.objects.filter(author=request.user).order_by('-created_at')
+                return render(request, self.template_name, {'reports': reports, 'form': form})
+
             report.save()
             messages.success(request, 'Доклад успешно зарегистрирован!')
             return redirect('register_report')
+
         messages.error(request, 'Пожалуйста, исправьте ошибки в форме.')
         reports = Report.objects.filter(author=request.user).order_by('-created_at')
         return render(request, self.template_name, {'reports': reports, 'form': form})
@@ -109,12 +162,12 @@ class RegisterReportPageView(LoginRequiredMixin, View):
 
 class ReportDetailView(DetailView):
     model = Report
-    template_name = 'info_report.html'  # <-- шаблон конкретного доклада
+    template_name = 'info_report.html'
     context_object_name = 'report'
 
 
 class GetReferenceListView(LoginRequiredMixin, TemplateView):
-    template_name = 'report.html'  # <-- список всех докладов пользователя
+    template_name = 'report.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -125,6 +178,7 @@ class GetReferenceListView(LoginRequiredMixin, TemplateView):
             context['reports'] = []
         return context
 
+
 class GetReferenceView(TemplateView):
     template_name = 'get-reference.html'
 
@@ -133,7 +187,12 @@ class GetReferenceView(TemplateView):
         report_id = self.kwargs.get('report_id')
         report = get_object_or_404(Report, id=report_id)
         context['report'] = report
+
+        plagiarism_details = self.request.session.pop('plagiarism_details', None)
+        context['plagiarism_details'] = plagiarism_details if plagiarism_details else []
+
         return context
+
 
 class EditReportView(LoginRequiredMixin, View):
     template_name = 'edit_report.html'
@@ -147,15 +206,30 @@ class EditReportView(LoginRequiredMixin, View):
         report = get_object_or_404(Report, pk=pk, author=request.user)
         form = ReportForm(request.POST, request.FILES, instance=report)
         if form.is_valid():
-            form.save()
+            report = form.save(commit=False)
+
+            if not report.content and report.file:
+                extracted_text = extract_text_from_pdf(report.file)
+                if extracted_text:
+                    report.content = extracted_text
+                else:
+                    messages.warning(request, "Не удалось извлечь текст из PDF.")
+
+            if not report.content:
+                messages.error(request, "Доклад не может быть пустым. Введите текст или загрузите PDF.")
+                return render(request, self.template_name, {'form': form, 'report': report})
+
+            report.save()
             messages.success(request, 'Доклад успешно обновлён!')
             return redirect('report_info', pk=report.pk)
+
         messages.error(request, 'Пожалуйста, исправьте ошибки в форме.')
         return render(request, self.template_name, {'form': form, 'report': report})
 
+
 class ReportDeleteView(LoginRequiredMixin, UserPassesTestMixin, DeleteView):
     model = Report
-    template_name = 'reports/report_confirm_delete.html'  # можно использовать стандартный, или не создавать, т.к. форма не используется
+    template_name = 'reports/report_confirm_delete.html'
     success_url = reverse_lazy('profile')
 
     def test_func(self):
@@ -173,7 +247,6 @@ def generate_certificate(request, report_id):
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer)
 
-    # Подключаем кириллический шрифт из папки static
     font_path = os.path.join(settings.BASE_DIR, 'static', 'DejaVuSans.ttf')
     pdfmetrics.registerFont(TTFont('DejaVu', font_path))
     p.setFont("DejaVu", 14)

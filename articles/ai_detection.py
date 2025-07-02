@@ -1,31 +1,26 @@
 # articles/ai_detection.py
-import os
-import requests
-from dotenv import load_dotenv
+import torch
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import numpy as np
 
-load_dotenv()
-
-SAPLING_API_KEY = os.getenv("SAPLING_API_KEY")
+# Загружаем модель один раз при старте
+MODEL_NAME = "roberta-base"
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
 
 def detect_ai(text: str) -> float:
     """
-    Возвращает вероятность AI-генерации текста от Sapling API.
+    Использует RoBERTa для определения вероятности AI-генерации текста.
+    Возвращает число от 0 до 100.
     """
-    url = "https://api.sapling.ai/api/v1/aidetect"
-    headers = {
-        "Authorization": f"Bearer {SAPLING_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "key": SAPLING_API_KEY,
-        "text": text
-    }
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
 
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200:
-        result = response.json()
-        prob = result.get("ai_probability", 0.0)
-        return round(float(prob) * 100, 2)
-    else:
-        print("Sapling API error:", response.status_code, response.text)
-        return 0.0
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+        probs = torch.softmax(logits, dim=1).squeeze().tolist()
+
+    # probs[1] — вероятность того, что это AI-текст
+    ai_probability = probs[1]
+    print(f"[RoBERTa AI Detection] AI probability: {ai_probability:.4f}")
+    return round(ai_probability * 100, 2)
