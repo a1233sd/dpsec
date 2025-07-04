@@ -1,33 +1,31 @@
-#articles/external_search.py
-import os
+# articles/external_search.py
+import logging
+
 import requests
-from dotenv import load_dotenv
-from .cache_utils import get_cached_result, set_cached_result
+from django.conf import settings
 
-load_dotenv()
+from .decorators import cached_search
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")
+logger = logging.getLogger(__name__)
 
 
+@cached_search
 def search_google_fragment(query):
     """
-    Выполняет Google Custom Search и возвращает найденные результаты.
-    Использует кэширование для снижения количества запросов.
+    Выполняет Google Custom Search и возвращает результаты.
     """
-    cached = get_cached_result(query)
-    if cached is not None:
-        print("[Google Search] Используется кэш для запроса.")
-        return cached
+    api_key = settings.GOOGLE_API_KEY
+    cse_id = settings.GOOGLE_CSE_ID
 
-    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        print("[Google Search] Ошибка: GOOGLE_API_KEY или GOOGLE_CSE_ID не заданы.")
+    if not api_key or not cse_id:
+        logger.warning("GOOGLE_API_KEY или"
+                       " GOOGLE_CSE_ID не заданы в settings.")
         return []
 
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
-        "key": GOOGLE_API_KEY,
-        "cx": GOOGLE_CSE_ID,
+        "key": api_key,
+        "cx": cse_id,
         "q": query,
         "num": 5,
     }
@@ -38,24 +36,22 @@ def search_google_fragment(query):
         data = response.json()
     except requests.HTTPError as e:
         if response.status_code == 429:
-            print("[Google Search] Превышен лимит запросов (429). Пропускаем поиск.")
+            logger.warning("Превышен лимит запросов (429).")
         else:
-            print(f"[Google Search Error] HTTP Error: {e}")
+            logger.error(f"HTTP Error: {e}")
         return []
     except requests.RequestException as e:
-        print(f"[Google Search Error] Request Exception: {e}")
+        logger.error(f"Request Exception: {e}")
         return []
 
-    results = []
-    for item in data.get("items", []):
-        results.append({
+    results = [
+        {
             "title": item.get("title"),
             "url": item.get("link"),
             "snippet": item.get("snippet"),
-        })
-    print(f"[Google Search] Найдено совпадений: {len(results)}")
+        }
+        for item in data.get("items", [])
+    ]
 
-    # Сохраняем в кэш
-    set_cached_result(query, results)
-
+    logger.info(f"[Google Search] Найдено совпадений: {len(results)}")
     return results

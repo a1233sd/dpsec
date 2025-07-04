@@ -6,23 +6,31 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('articles', '0002_initial'),
+        ("articles", "0002_initial"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='report',
-            old_name='user',
-            new_name='author',
+            model_name="report",
+            old_name="user",
+            new_name="author",
         ),
         migrations.RenameField(
-            model_name='report',
-            old_name='uploaded_at',
-            new_name='created_at',
+            model_name="report",
+            old_name="uploaded_at",
+            new_name="created_at",
         ),
         migrations.AddField(
-            model_name='report',
-            name='status',
-            field=models.CharField(choices=[('draft', 'Черновик'), ('published', 'Опубликовано'), ('archived', 'Архив')], default='draft', max_length=20),
+            model_name="report",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("draft", "Черновик"),
+                    ("published", "Опубликовано"),
+                    ("archived", "Архив"),
+                ],
+                default="draft",
+                max_length=20,
+            ),
         ),
     ]

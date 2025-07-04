@@ -1,13 +1,15 @@
 # articles/tests/test_analysis.py
-import pytest
-import os
-import time
-from articles.ai_detection import detect_ai
+from unittest.mock import patch
+
 from articles import cache_utils
+from articles.ai_detection import detect_ai
+from articles.external_search import search_google_fragment
+
 
 def test_cache_set_and_get(tmp_path, monkeypatch):
     test_query = "sample fragment"
-    test_results = [{"title": "Test", "url": "http://example.com", "snippet": "text"}]
+    test_results = [{"title": "Test",
+                     "url": "http://example.com", "snippet": "text"}]
 
     cache_file = tmp_path / "test_cache.json"
     monkeypatch.setattr(cache_utils, "CACHE_FILE", str(cache_file))
@@ -17,18 +19,19 @@ def test_cache_set_and_get(tmp_path, monkeypatch):
 
     assert cached == test_results
 
-from articles.external_search import search_google_fragment
-from unittest.mock import patch
 
 @patch("articles.external_search.get_cached_result")
 @patch("articles.external_search.set_cached_result")
 @patch("articles.external_search.requests.get")
-def test_search_google_fragment_uses_api(mock_get, mock_set_cache, mock_get_cache):
+def test_search_google_fragment_uses_api(mock_get,
+                                         mock_set_cache,
+                                         mock_get_cache):
     mock_get_cache.return_value = None
 
     mock_response = {
         "items": [
-            {"title": "Test Result", "link": "http://example.com", "snippet": "snippet"}
+            {"title": "Test Result",
+             "link": "http://example.com", "snippet": "snippet"}
         ]
     }
 
@@ -43,5 +46,6 @@ def test_search_google_fragment_uses_api(mock_get, mock_set_cache, mock_get_cach
 
 
 def test_detect_ai_probability_range():
-    result = detect_ai("This is an example academic abstract about psychology.")
+    result = detect_ai("This is an example "
+                       "academic abstract about psychology.")
     assert 0 <= result <= 100

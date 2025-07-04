@@ -6,17 +6,18 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('articles', '0005_report_originality_percent'),
+        ("articles", "0005_report_originality_percent"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='report',
-            name='file_path',
+            model_name="report",
+            name="file_path",
         ),
         migrations.AddField(
-            model_name='report',
-            name='file',
-            field=models.FileField(blank=True, null=True, upload_to='reports_files/'),
+            model_name="report",
+            name="file",
+            field=models.FileField(blank=True, null=True,
+                                   upload_to="reports_files/"),
         ),
     ]
