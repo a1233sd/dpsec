@@ -1,8 +1,11 @@
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.contrib.auth.models import (AbstractBaseUser, BaseUserManager,
+                                        PermissionsMixin)
 from django.db import models
 
+
 class CustomUserManager(BaseUserManager):
-    def create_user(self, email, password=None, full_name=None, **extra_fields):
+    def create_user(self, email, password=None, full_name=None,
+                    **extra_fields):
         if not email:
             raise ValueError("Email обязателен")
         if not full_name:
@@ -14,10 +17,11 @@ class CustomUserManager(BaseUserManager):
         user.save()
         return user
 
-    def create_superuser(self, email, password=None, full_name=None, **extra_fields):
-        extra_fields.setdefault('is_admin', True)
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
+    def create_superuser(self, email, password=None, full_name=None,
+                         **extra_fields):
+        extra_fields.setdefault("is_admin", True)
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
 
         if not full_name:
             raise ValueError("Superuser должен иметь имя (full_name)")
@@ -33,8 +37,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['full_name']  # 👈 обязательно!
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["full_name"]  # 👈 обязательно!
 
     objects = CustomUserManager()
 

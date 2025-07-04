@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('articles', '0004_report_ai_generated_percent'),
+        ("articles", "0004_report_ai_generated_percent"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='report',
-            name='originality_percent',
+            model_name="report",
+            name="originality_percent",
             field=models.FloatField(blank=True, null=True),
         ),
     ]
