@@ -117,5 +117,9 @@ pytest
 Docker-контейнеризация для удобного развертывания
 
 # Контакты
+
+
 Автор: Евгений Ясаков
-Email: nadmin@test.com
+
+
+Email: uskat2@yandex.ru
